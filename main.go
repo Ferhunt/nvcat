@@ -26,6 +26,7 @@ type nvcatCliFlags struct {
 	clean   *bool
 	help    *bool
 	version *bool
+	stdoutColor *bool
 }
 
 type formatOpts struct {
@@ -37,12 +38,15 @@ var cliFlags = nvcatCliFlags{
 	clean:       flag.Bool("clean", false, "Use a clean Neovim instance"),
 	help:        flag.Bool("h", false, "Show help"),
 	version:     flag.Bool("v", false, "Show version"),
+	stdoutColor:     flag.Bool("c", false, "Send color codes through stdout instead of stderr"),
 }
 
 //go:embed runtime/plugin/nvcat.lua
 var LuaPluginScript string
 
 var Version = "dev"
+
+var colorFile *os.File
 
 func main() {
 	flag.Parse()
@@ -123,6 +127,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *cliFlags.stdoutColor {
+		colorFile = os.Stdout
+	} else {
+		colorFile = os.Stderr
+	}
 	printLines(vim, lines, formatOpts { tab: tab })
 }
 
@@ -196,7 +205,7 @@ func printHighlightedLine(vim *nvim.Nvim, lineNum int, line string, opts formatO
 		err := vim.ExecLua("return NvcatGetHl(...)", &hl, lineNum, col)
 		if err != nil {
 			if currentAnsi != "" {
-				fmt.Fprint(os.Stderr, AnsiReset)
+				fmt.Fprint(colorFile, AnsiReset)
 				currentAnsi = ""
 			}
 			fmt.Fprint(os.Stdout, token)
@@ -207,7 +216,7 @@ func printHighlightedLine(vim *nvim.Nvim, lineNum int, line string, opts formatO
 		ansi, err := getAnsiFromHl(hl)
 		if err != nil {
 			if currentAnsi != "" {
-				fmt.Fprint(os.Stderr, AnsiReset)
+				fmt.Fprint(colorFile, AnsiReset)
 				currentAnsi = ""
 			}
 			fmt.Fprint(os.Stdout, token)
@@ -218,9 +227,9 @@ func printHighlightedLine(vim *nvim.Nvim, lineNum int, line string, opts formatO
 		// Update ANSI escape sequence only if it changed
 		if ansi != currentAnsi {
 			if currentAnsi != "" {
-				fmt.Fprint(os.Stderr, AnsiReset)
+				fmt.Fprint(colorFile, AnsiReset)
 			}
-			fmt.Fprint(os.Stderr, ansi)
+			fmt.Fprint(colorFile, ansi)
 			currentAnsi = ansi
 		}
 
@@ -230,7 +239,7 @@ func printHighlightedLine(vim *nvim.Nvim, lineNum int, line string, opts formatO
 
 	// Reset color at the end of the line
 	if currentAnsi != "" {
-		fmt.Fprint(os.Stderr, AnsiReset)
+		fmt.Fprint(colorFile, AnsiReset)
 	}
 
 	return "", nil
